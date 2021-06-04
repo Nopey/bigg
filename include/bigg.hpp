@@ -8,6 +8,8 @@
 #include <imgui.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <cstdlib>
+#include <exception>
 
 #include <bx/allocator.h>
 
@@ -22,17 +24,25 @@ namespace bigg
 	class Allocator : public bx::AllocatorI
 	{
 	public:
-		void* realloc( void* _ptr, size_t _size, size_t _align, const char* _file, uint32_t _line )
+		void* realloc( void* ptr, size_t size, size_t _align, const char* _file, uint32_t _line )
 		{
-			if ( _size == 0 )
-			{
-				free( _ptr );
-				return nullptr;
-			}
-			else
-			{
-				return malloc( _size );
-			}
+			return std::realloc( ptr, size );
+		}
+	};
+
+	class glfw_init_failed : public std::exception
+	{
+		virtual const char* what() const throw()
+		{
+			return "Failed to initialize GLFW";
+		}
+	};
+
+	class glfw_window_creation_failed : public std::exception
+	{
+		virtual const char* what() const throw()
+		{
+			return "Failed to create a GLFW window";
 		}
 	};
 
@@ -49,17 +59,20 @@ namespace bigg
 		static void dropCallback( GLFWwindow* window, int count, const char** paths );
 		static void windowSizeCallback( GLFWwindow* window, int width, int height );
 	public:
-		Application( const char* title = "", uint32_t width = 1280, uint32_t height = 768 );
-
-		int run(
-			int argc,
-			char** argv,
+		Application(
+			const char* title = "",
+			uint32_t width = 1280,
+			uint32_t height = 768,
 			bgfx::RendererType::Enum type = bgfx::RendererType::Count,
 			uint16_t vendorId = BGFX_PCI_ID_NONE,
 			uint16_t deviceId = 0,
 			bgfx::CallbackI* callback = NULL,
 			bx::AllocatorI* allocator = NULL
 		);
+
+		~Application();
+
+		int run( int argc, char** argv );
 
 		void reset( uint32_t flags = 0 );
 		uint32_t getWidth() const;
@@ -72,8 +85,11 @@ namespace bigg
 		float getMouseWheelH() const;
 		float getMouseWheel() const;
 
+		// initialize, update, and shutdown are called by run.
+		// run is re-entrant, and so should be your implementation of these.
 		virtual void initialize( int _argc, char** _argv ) {};
 		virtual void update( float dt ) {};
+		// shutdown's return value becomes run's return value, and should usually end up being main's return value.
 		virtual int shutdown() { return 0; };
 
 		virtual void onReset() {};

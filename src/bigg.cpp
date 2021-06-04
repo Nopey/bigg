@@ -161,54 +161,53 @@ void bigg::Application::windowSizeCallback( GLFWwindow* window, int width, int h
 	app->onWindowSize( width, height );
 }
 
-bigg::Application::Application( const char* title, uint32_t width, uint32_t height )
+bigg::Application::Application( const char* title, uint32_t width, uint32_t height, bgfx::RendererType::Enum type, uint16_t vendorId, uint16_t deviceId, bgfx::CallbackI* callback, bx::AllocatorI* allocator )
 {
 	mWidth = width;
 	mHeight = height;
 	mTitle = title;
-}
 
-int bigg::Application::run( int argc, char** argv, bgfx::RendererType::Enum type, uint16_t vendorId, uint16_t deviceId, bgfx::CallbackI* callback, bx::AllocatorI* allocator )
-{
 	// Initialize the glfw
-	if ( !glfwInit() )
+	if (!glfwInit())
 	{
-		return -1;
+		throw glfw_init_failed {};
 	}
 
 	// Create a window
-	glfwWindowHint( GLFW_CLIENT_API, GLFW_NO_API );
-	mWindow = glfwCreateWindow( getWidth(), getHeight(), getTitle(), NULL, NULL );
-	if ( !mWindow )
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+
+	mWindow = glfwCreateWindow(getWidth(), getHeight(), getTitle(), NULL, NULL);
+	if (!mWindow)
 	{
 		glfwTerminate();
-		return -1;
+		throw glfw_window_creation_failed {};
 	}
 
 	// Setup input callbacks
-	glfwSetWindowUserPointer( mWindow, this );
-	glfwSetKeyCallback( mWindow, keyCallback );
-	glfwSetCharCallback( mWindow, charCallback );
-	glfwSetCharModsCallback( mWindow, charModsCallback );
-	glfwSetMouseButtonCallback( mWindow, mouseButtonCallback );
-	glfwSetCursorPosCallback( mWindow, cursorPosCallback );
-	glfwSetCursorEnterCallback( mWindow, cursorEnterCallback );
-	glfwSetScrollCallback( mWindow, scrollCallback );
-	glfwSetDropCallback( mWindow, dropCallback );
-	glfwSetWindowSizeCallback( mWindow, windowSizeCallback );
+	glfwSetWindowUserPointer(mWindow, this);
+	glfwSetKeyCallback(mWindow, keyCallback);
+	glfwSetCharCallback(mWindow, charCallback);
+	glfwSetCharModsCallback(mWindow, charModsCallback);
+	glfwSetMouseButtonCallback(mWindow, mouseButtonCallback);
+	glfwSetCursorPosCallback(mWindow, cursorPosCallback);
+	glfwSetCursorEnterCallback(mWindow, cursorEnterCallback);
+	glfwSetScrollCallback(mWindow, scrollCallback);
+	glfwSetDropCallback(mWindow, dropCallback);
+	glfwSetWindowSizeCallback(mWindow, windowSizeCallback);
 
 	// Setup bgfx
 	bgfx::PlatformData platformData;
-	memset( &platformData, 0, sizeof( platformData ) );
+	memset(&platformData, 0, sizeof(platformData));
 #if BX_PLATFORM_LINUX || BX_PLATFORM_BSD
-	platformData.nwh = ( void* )( uintptr_t )glfwGetX11Window( mWindow );
+	platformData.nwh = (void*)(uintptr_t)glfwGetX11Window(mWindow);
 	platformData.ndt = glfwGetX11Display();
 #elif BX_PLATFORM_OSX
-	platformData.nwh = glfwGetCocoaWindow( mWindow );
+	platformData.nwh = glfwGetCocoaWindow(mWindow);
 #elif BX_PLATFORM_WINDOWS
-	platformData.nwh = glfwGetWin32Window( mWindow );
+	platformData.nwh = glfwGetWin32Window(mWindow);
 #endif // BX_PLATFORM_
-	bgfx::setPlatformData( platformData );
+	bgfx::setPlatformData(platformData);
 
 	// Init bgfx
 	bgfx::Init init;
@@ -217,24 +216,35 @@ int bigg::Application::run( int argc, char** argv, bgfx::RendererType::Enum type
 	init.deviceId = deviceId;
 	init.callback = callback;
 	init.allocator = allocator;
-	bgfx::init( init );
+	bgfx::init(init);
 
 	// Setup ImGui
-	imguiInit( mWindow );
+	imguiInit(mWindow);
+}
 
+bigg::Application::~Application()
+{
+	imguiShutdown();
+	bgfx::shutdown();
+	glfwTerminate();
+}
+
+int bigg::Application::run( int argc, char** argv )
+{
 	// Initialize the application
 	reset();
 	initialize( argc, argv );
 
+	glfwShowWindow( mWindow );
 
 	// Loop until the user closes the window
 	double lastTime = 0;
-	double dt;
+	float dt;
 	double time;
 	while ( !glfwWindowShouldClose( mWindow ) )
 	{
 		time = glfwGetTime();
-		dt = time - lastTime;
+		dt = (float) (time - lastTime);
 
 		lastTime = time;
 
@@ -246,19 +256,17 @@ int bigg::Application::run( int argc, char** argv, bgfx::RendererType::Enum type
 		imguiRender( ImGui::GetDrawData() );
 		bgfx::frame();
 
-		float frameTime = glfwGetTime() - time;
+		float frameTime = (float) (glfwGetTime() - time);
 		if (mFpsLock > 0)
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds((int)(1000.0f / mFpsLock - frameTime * 1000) ));
 		}
 	}
 
-	// Shutdown application and glfw
-	int ret = shutdown();
-	imguiShutdown();
-	bgfx::shutdown();
-	glfwTerminate();
-	return ret;
+	glfwHideWindow( mWindow );
+
+	// Shutdown application
+	return shutdown();
 }
 
 void bigg::Application::reset( uint32_t flags )
